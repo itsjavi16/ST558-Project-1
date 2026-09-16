@@ -5,23 +5,66 @@ format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
-```{r}
-1 + 1
+```{r libraries}
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(tibble)
+library(lubridate)
 ```
 
-You can add options to executable code like this
-
 ```{r}
-#| echo: false
-2 * 2
+# PART 1: DATA PROCESSING
+
+# Parsing Variable Values
+getVariableValues <- function(year) {
+  if (!year %in% 2021:2024) {
+    stop("Year must be 2021, 2022, 2023, or 2024")
+  }
+  
+  # Create a lookup table
+  geo_lookup <- list(
+    "2021" = "ST", "2022" = "ST",
+    "2023" = "STATE", "2024" = "STATE"
+  )
+  
+  geo_var <- geo_lookup[[as.character(year)]]
+  
+  vars_needed <- c("AGEP", "GASP", "GRPIP", "JWAP", "JWDP", "JWMNP",
+                    "PWGTP", "FER", "HHL", "SCH", "SCHL", "SEX",
+                    geo_var, "REGION", "DIVISION")
+
+  url <- paste0("https://api.census.gov/data/", year, "/acs/acs1/pums/variables.json")
+  resp <- GET(url)
+  parsed <- fromJSON(rawToChar(resp$content), simplifyVector = FALSE)
+  all_vars <- parsed$variables
+
+  value_list <- list()
+  for (v in vars_needed) {
+    value_list[[v]] <- all_vars[[v]]$values$item
+  }
+ 
+  value_list
+}
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+if (!file.exists("data/variable_values.rds")) {
+  years <- c(2021, 2022, 2023, 2024)
+  variable_values <- list()
+  for (yr in years) {
+    variable_values[[as.character(yr)]] <- getVariableValues(yr)
+  }
+  dir.create("data", showWarnings = FALSE)
+  saveRDS(variable_values, "data/variable_values.rds")
+}
+ 
+# Loads the saved variable value/label lookups for one year.
+loadVariableValues <- function(year) {
+  variable_values <- readRDS("data/variable_values.rds")
+  variable_values[[as.character(year)]]
+}
+ 
+# a quick sanity check
+loadVariableValues(2021)$SCH
+```
